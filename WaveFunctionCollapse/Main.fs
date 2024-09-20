@@ -170,10 +170,7 @@ let rules = parseRulesFromSample(sample)
 let initialSuperposition = Superposition(['─'; '│'; '┌'; '┐'; '└'; '┘'])
 let initialField = Field(5, 5, initialSuperposition)
 
-initialField.SetCell(0, 0, Superposition(['┌']))
-initialField.SetCell(1, 3, Superposition(['─']))
-initialField.SetCell(2, 4, Superposition(['└']))
-initialField.SetCell(4, 0, Superposition(['┘']))
+initialField.SetCell(0, 0, Superposition(['└']))
 
 let field = tryCollapse(initialField, rules)
 
