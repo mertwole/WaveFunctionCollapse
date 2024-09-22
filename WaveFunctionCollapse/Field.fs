@@ -30,32 +30,32 @@ type Field private (field_: Superposition array2d) =
     let field = field_
 
     new(size: Vector2, initialValues: Superposition) = 
-        Field(Array2D.create size.X size.Y initialValues)
+        Field(Array2D.create size.Y size.X initialValues)
 
-    member this.Size(): Vector2 = { X = field.GetLength(0); Y = field.GetLength(1) }
+    member this.Size(): Vector2 = { X = field.GetLength(1); Y = field.GetLength(0) }
 
-    member this.Width(): int = field.GetLength(0)
+    member this.Width(): int = field.GetLength(1)
 
-    member this.Height(): int = field.GetLength(1)
+    member this.Height(): int = field.GetLength(0)
 
     member this.Clone(): Field = 
         let size = this.Size()
-        let newField = Array2D.create size.X size.Y (Superposition([]))
+        let newField = Array2D.create size.Y size.X (Superposition([]))
         for y in 0..this.Height() - 1 do
             for x in 0..this.Width() - 1 do
-                newField.[x, y] <- field.[x, y]
+                newField.[y, x] <- field.[y, x]
         Field(newField)
 
     member this.GetCell(position: Vector2): Superposition = 
-        field.[position.X, position.Y]
+        field.[position.Y, position.X]
 
     member this.SetCell(position: Vector2, tile: Superposition) = 
-        field.[position.X, position.Y] <- tile
+        field.[position.Y, position.X] <- tile
 
     member this.Print() = 
         for y in 0..this.Height() - 1 do
             for x in 0..this.Width() - 1 do
-                printf "%c" (field.[x, y].GetChar())
+                printf "%c" (field.[y, x].GetChar())
             printfn ""
 
     member this.PrintDebug() = 
@@ -67,5 +67,5 @@ type Field private (field_: Superposition array2d) =
         
         for y in 0..this.Height() - 1 do
             for x in 0..this.Width() - 1 do
-                printf "%s" (field.[x, y].ToDebugString(maxSuperpositionSize))
+                printf "%s" (field.[y, x].ToDebugString(maxSuperpositionSize))
             printfn ""

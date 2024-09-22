@@ -111,7 +111,6 @@ let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedFi
         | Some attempt -> 
             newCollapses.Push({ collapse with Attempts = collapse.Attempts @ [attempt] })
 
-            let { X = collapseX; Y = collapseY } = collapse.CollapsePosition
             let newField = collapse.Field.Clone()
             let collapsedCell = { Position = collapse.CollapsePosition; Value = attempt  }
 
@@ -119,10 +118,10 @@ let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedFi
                 | Some field -> 
                     // TODO: Select based on entropy metric
                     let nextCollapsePosition =
-                        if collapseX = field.Width() - 1 then
-                            { X = 0; Y = collapseY + 1 }
+                        if collapse.CollapsePosition.X = field.Width() - 1 then
+                            { X = 0; Y = collapse.CollapsePosition.Y + 1 }
                         else 
-                            { X = collapseX + 1; Y = collapseY}
+                            { X = collapse.CollapsePosition.X + 1; Y = collapse.CollapsePosition.Y }
 
                     let newCollapse = { Field = field; CollapsePosition = nextCollapsePosition; Attempts = [] }
                     newCollapses.Push(newCollapse)
@@ -150,16 +149,16 @@ let tryCollapse(initialField: Field, rules: RuleSet) : Field option =
         | _ -> Some (collapses.Pop().Field)
 
 let sample = array2D([
-    ['┌'; '─'; '─'; '┐']
-    ['│'; '┌'; '┐'; '│']
-    ['│'; '└'; '┘'; '│']
-    ['└'; '─'; '─'; '┘']
+    ['┌'; '─'; '─'; '┐'; '┌'; '┐']
+    ['│'; '┌'; '┐'; '└'; '┘'; '│']
+    ['│'; '└'; '┘'; '┌'; '┐'; '│']
+    ['└'; '─'; '─'; '┘'; '└'; '┘']
 ])
 
 let rules = parseRulesFromSample(sample)
 
 let initialSuperposition = Superposition(['─'; '│'; '┌'; '┐'; '└'; '┘'])
-let initialField = Field({ X = 5; Y = 5 }, initialSuperposition)
+let initialField = Field({ X = 8; Y = 4 }, initialSuperposition)
 
 initialField.SetCell({ X = 0; Y = 0 }, Superposition(['└']))
 
