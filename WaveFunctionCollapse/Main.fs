@@ -20,7 +20,7 @@ type CollapsedCell = {
 
 type ApplyRulesResult = {
     NewField: Field
-    changed: bool
+    Changed: bool
 }
 
 let possibleValuesDueRules(adjacent: Superposition, adjacencyDirection: Direction, rules: RuleSet): Superposition =     
@@ -59,35 +59,41 @@ let tryApplyRulesToCell(field: Field, position: Vector2, rules: RuleSet): Superp
 
     possibleValues.Intersection(field.GetCell(position))
 
-let tryApplyRules(field: Field, rules: RuleSet): ApplyRulesResult option =
+let determineNextPosition(fieldSize: Vector2, position: Vector2): Vector2 option =
+    let nextPosition = { position with X = position.X + 1 }
+    if nextPosition.X = fieldSize.X then
+        Some { nextPosition with Y = nextPosition.Y + 1 }
+    else
+        Some nextPosition
+
+let rec tryApplyRulesInner(field: Field, position: Vector2, rules: RuleSet): ApplyRulesResult option =
     let newField = field.Clone()
-
-    let mutable changed = false
-    let mutable contradiction = false
-
-    for y in 0..field.Height() - 1 do
-        for x in 0..field.Width() - 1 do
-            let position = { X = x; Y = y }
-            let oldValue = field.GetCell(position)
-            let newValue = tryApplyRulesToCell(field, position, rules)
-
-            newField.SetCell(position, newValue)
-
-            if newValue.Variants.Length = 0 then
-                contradiction <- true
-
-            if newValue.Variants.Length <> oldValue.Variants.Length then
-                changed <- true
-
-    if contradiction then
+    let oldValue = field.GetCell(position)
+    let newValue = tryApplyRulesToCell(field, position, rules)
+    
+    if newValue.Variants.Length = 0 then
         None
     else
-        Some { NewField = newField; changed = changed }
+        newField.SetCell(position, newValue)
+
+        let changed = newValue.Variants.Length <> oldValue.Variants.Length
+
+        match determineNextPosition(field.Size(), position) with
+            | None -> 
+                Some { NewField = newField; Changed = changed }
+            | Some nextPosition -> 
+                Option.map (
+                        fun result -> { result with Changed = result.Changed || changed }
+                    )
+                    (tryApplyRulesInner(newField, nextPosition, rules))
+
+let tryApplyRules(field: Field, rules: RuleSet): ApplyRulesResult option =
+    tryApplyRulesInner(field, Vector2.Zero, rules)
 
 let rec tryApplyRulesLoop(field: Field, rules: RuleSet): Field option =
     match tryApplyRules(field, rules) with
     | Some result -> 
-        if result.changed then
+        if result.Changed then
             tryApplyRulesLoop(result.NewField, rules)
         else
             Some result.NewField
