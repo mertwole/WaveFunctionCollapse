@@ -59,12 +59,14 @@ let tryApplyRulesToCell(field: Field, position: Vector2, rules: RuleSet): Superp
     possibleValues.Intersection(field.GetCell(position))
 
 let determineNextPosition(fieldSize: Vector2, position: Vector2): Vector2 option =
-    let nextPosition = { position with X = position.X + 1 }
-    if nextPosition.X = fieldSize.X then
-        Some { nextPosition with Y = nextPosition.Y + 1 }
+    if position.X = fieldSize.X - 1 then
+        if position.Y = fieldSize.Y - 1 then 
+            None
+        else
+            Some { X = 0; Y = position.Y + 1 }
     else
-        Some nextPosition
-
+        Some { position with X = position.X + 1 }
+    
 let rec tryApplyRulesInner(field: Field, position: Vector2, rules: RuleSet): ApplyRulesResult option =
     let newField = field.Clone()
     let oldValue = field.GetCell(position)
