@@ -9,7 +9,6 @@ open Rules
 type CollapsedField = {
     Field: Field
     CollapsePosition: Vector2
-    // TODO: newtype wrapper
     Attempts: char list
 }
 
