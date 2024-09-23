@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Common.fs" />
     <Compile Include="Rules.fs" />
     <Compile Include="Field.fs" />
     <Compile Include="Main.fs" />

@@ -2,30 +2,29 @@
 
 open System.Collections.Generic
 
+open Common
 open Field
 open Rules
 
-
 type CollapsedField = {
     Field: Field
-    CollapsePosition: int * int
-    // TODO: newtype wrapper
+    CollapsePosition: Vector2
     Attempts: char list
 }
 
 type CollapsedCell = {
-    Position: int * int
+    Position: Vector2
     Value: char
 }
 
 type ApplyRulesResult = {
     NewField: Field
-    changed: bool
+    Changed: bool
 }
 
-let possibleValuesDueRules(adjacent: Superposition, adjacencyDirection: Direction, rules: Rule list): Superposition =     
+let possibleValuesDueRules(adjacent: Superposition, adjacencyDirection: Direction, rules: RuleSet): Superposition =     
     let variants = 
-        rules
+        rules.Rules
         |> Seq.filter(
             fun rule -> 
                 rule.Adjacency = adjacencyDirection && (List.contains rule.AdjacentTile adjacent.Variants)
@@ -36,28 +35,20 @@ let possibleValuesDueRules(adjacent: Superposition, adjacencyDirection: Directio
     
     Superposition(variants)
 
-let tryApplyRulesToCell(field: Field, position: int * int, rules: Rule list): Superposition =
-    let (cellX, cellY) = position
-
+let tryApplyRulesToCell(field: Field, position: Vector2, rules: RuleSet): Superposition =
     let possibleValues =
         [Direction.Up; Direction.Down; Direction.Left; Direction.Right]
         |> Seq.choose (
             fun dir -> 
-                let (offsetX, offsetY) = 
-                    match dir with 
-                        | Up -> (0, -1)
-                        | Down -> (0, 1)
-                        | Left -> (-1, 0)
-                        | Right -> (1, 0)
+                let offset = dir.ToVector2()
+                let adjacent = position + offset
 
-                let (adjacentX, adjacentY) = (cellX + offsetX, cellY + offsetY)
-
-                let outOfBounds = adjacentX < 0 || adjacentX >= field.Width() || adjacentY < 0 || adjacentY >= field.Height()
+                let outOfBounds = adjacent.X < 0 || adjacent.X >= field.Width() || adjacent.Y < 0 || adjacent.Y >= field.Height()
 
                 if outOfBounds then
                     None
                 else
-                    let adjacent = field.GetCell(adjacentX, adjacentY)
+                    let adjacent = field.GetCell(adjacent)
                     Some (possibleValuesDueRules(adjacent, dir, rules))
             )
         |> Seq.reduce (
@@ -67,45 +58,51 @@ let tryApplyRulesToCell(field: Field, position: int * int, rules: Rule list): Su
 
     possibleValues.Intersection(field.GetCell(position))
 
-let tryApplyRules(field: Field, rules: Rule list): ApplyRulesResult option =
+let determineNextPosition(fieldSize: Vector2, position: Vector2): Vector2 option =
+    let nextPosition = { position with X = position.X + 1 }
+    if nextPosition.X = fieldSize.X then
+        Some { nextPosition with Y = nextPosition.Y + 1 }
+    else
+        Some nextPosition
+
+let rec tryApplyRulesInner(field: Field, position: Vector2, rules: RuleSet): ApplyRulesResult option =
     let newField = field.Clone()
-
-    let mutable changed = false
-    let mutable contradiction = false
-
-    for y in 0..field.Height() - 1 do
-        for x in 0..field.Width() - 1 do
-            let oldValue = field.GetCell(x, y)
-            let newValue = tryApplyRulesToCell(field, (x, y), rules)
-
-            newField.SetCell(x, y, newValue)
-
-            if newValue.Variants.Length = 0 then
-                contradiction <- true
-
-            if newValue.Variants.Length <> oldValue.Variants.Length then
-                changed <- true
-
-    if contradiction then
+    let oldValue = field.GetCell(position)
+    let newValue = tryApplyRulesToCell(field, position, rules)
+    
+    if newValue.Variants.Length = 0 then
         None
     else
-        Some { NewField = newField; changed = changed }
+        newField.SetCell(position, newValue)
 
-let rec tryApplyRulesLoop(field: Field, rules: Rule list): Field option =
+        let changed = newValue.Variants.Length <> oldValue.Variants.Length
+
+        match determineNextPosition(field.Size(), position) with
+            | None -> 
+                Some { NewField = newField; Changed = changed }
+            | Some nextPosition -> 
+                Option.map (
+                        fun result -> { result with Changed = result.Changed || changed }
+                    )
+                    (tryApplyRulesInner(newField, nextPosition, rules))
+
+let tryApplyRules(field: Field, rules: RuleSet): ApplyRulesResult option =
+    tryApplyRulesInner(field, Vector2.Zero, rules)
+
+let rec tryApplyRulesLoop(field: Field, rules: RuleSet): Field option =
     match tryApplyRules(field, rules) with
     | Some result -> 
-        if result.changed then
+        if result.Changed then
             tryApplyRulesLoop(result.NewField, rules)
         else
             Some result.NewField
     | None -> None
 
-let tryCollapseCell(field: Field, cell: CollapsedCell, rules: Rule list): Field option =
-    let (collapseX, collapseY) = cell.Position
-    field.SetCell(collapseX, collapseY, Superposition([cell.Value]))
+let tryCollapseCell(field: Field, cell: CollapsedCell, rules: RuleSet): Field option =
+    field.SetCell(cell.Position, Superposition([cell.Value]))
     tryApplyRulesLoop(field, rules)
 
-let processCollapse(collapse: CollapsedField, rules: Rule list): Stack<CollapsedField> =
+let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedField> =
     let collapsedCell = collapse.Field.GetCell(collapse.CollapsePosition)
 
     // TODO: Make decision based on tile probabilities derived from input sample.
@@ -119,19 +116,17 @@ let processCollapse(collapse: CollapsedField, rules: Rule list): Stack<Collapsed
         | Some attempt -> 
             newCollapses.Push({ collapse with Attempts = collapse.Attempts @ [attempt] })
 
-            let (collapseX, collapseY) = collapse.CollapsePosition
             let newField = collapse.Field.Clone()
             let collapsedCell = { Position = collapse.CollapsePosition; Value = attempt  }
 
             match tryCollapseCell(newField, collapsedCell, rules) with
                 | Some field -> 
                     // TODO: Select based on entropy metric
-                    let (fieldWidth, _) = field.Size()
                     let nextCollapsePosition =
-                        if collapseX = fieldWidth - 1 then
-                            (0, collapseY + 1)
+                        if collapse.CollapsePosition.X = field.Width() - 1 then
+                            { X = 0; Y = collapse.CollapsePosition.Y + 1 }
                         else 
-                            (collapseX + 1, collapseY)
+                            { X = collapse.CollapsePosition.X + 1; Y = collapse.CollapsePosition.Y }
 
                     let newCollapse = { Field = field; CollapsePosition = nextCollapsePosition; Attempts = [] }
                     newCollapses.Push(newCollapse)
@@ -140,9 +135,9 @@ let processCollapse(collapse: CollapsedField, rules: Rule list): Stack<Collapsed
 
     newCollapses
 
-let tryCollapse(initialField: Field, rules: Rule list) : Field option =
+let tryCollapse(initialField: Field, rules: RuleSet) : Field option =
     let collapses = new Stack<CollapsedField>()
-    let initialCollapse = { Field = initialField; CollapsePosition = (0, 0); Attempts = [] }
+    let initialCollapse = { Field = initialField; CollapsePosition = Vector2.Zero; Attempts = [] }
     
     collapses.Push(initialCollapse)
 
@@ -159,18 +154,18 @@ let tryCollapse(initialField: Field, rules: Rule list) : Field option =
         | _ -> Some (collapses.Pop().Field)
 
 let sample = array2D([
-    ['┌'; '─'; '─'; '┐']
-    ['│'; '┌'; '┐'; '│']
-    ['│'; '└'; '┘'; '│']
-    ['└'; '─'; '─'; '┘']
+    ['┌'; '─'; '─'; '┐'; '┌'; '┐']
+    ['│'; '┌'; '┐'; '└'; '┘'; '│']
+    ['│'; '└'; '┘'; '┌'; '┐'; '│']
+    ['└'; '─'; '─'; '┘'; '└'; '┘']
 ])
 
 let rules = parseRulesFromSample(sample)
 
 let initialSuperposition = Superposition(['─'; '│'; '┌'; '┐'; '└'; '┘'])
-let initialField = Field(5, 5, initialSuperposition)
+let initialField = Field({ X = 8; Y = 4 }, initialSuperposition)
 
-initialField.SetCell(0, 0, Superposition(['└']))
+initialField.SetCell({ X = 0; Y = 0 }, Superposition(['└']))
 
 let field = tryCollapse(initialField, rules)
 
