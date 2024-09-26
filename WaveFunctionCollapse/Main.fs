@@ -104,6 +104,22 @@ let tryCollapseCell(field: Field, cell: CollapsedCell, rules: RuleSet): Field op
     field.SetCell(cell.Position, Superposition([cell.Value]))
     tryApplyRulesLoop(field, rules)
 
+let determineMinimalEntropyCell(field: Field): Vector2 option =
+    let positions = 
+        seq { 0..field.Width() - 1 }
+        |> Seq.allPairs (seq { 0..field.Height() - 1 })
+        |> Seq.map (fun (y, x) -> { X = x; Y = y })
+        |> Seq.filter (fun position -> field.GetCell(position).Variants.Length > 1)
+
+    if Seq.isEmpty positions then
+        None
+    else
+        Some (
+            positions 
+                |> Seq.randomShuffle // This makes results more interesting.
+                |> Seq.minBy (fun position -> field.GetCell(position).Variants.Length)
+        )
+
 let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedField> =
     let collapsedCell = collapse.Field.GetCell(collapse.CollapsePosition)
 
@@ -122,16 +138,17 @@ let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedFi
             let collapsedCell = { Position = collapse.CollapsePosition; Value = attempt  }
 
             match tryCollapseCell(newField, collapsedCell, rules) with
-                | Some field -> 
-                    // TODO: Select based on entropy metric
-                    let nextCollapsePosition =
-                        if collapse.CollapsePosition.X = field.Width() - 1 then
-                            { X = 0; Y = collapse.CollapsePosition.Y + 1 }
-                        else 
-                            { X = collapse.CollapsePosition.X + 1; Y = collapse.CollapsePosition.Y }
-
-                    let newCollapse = { Field = field; CollapsePosition = nextCollapsePosition; Attempts = [] }
-                    newCollapses.Push(newCollapse)
+                | Some field ->
+                    let nextCollapsePosition = determineMinimalEntropyCell(field)
+                    
+                    match nextCollapsePosition with
+                    | Some nextCollapsePosition ->
+                        let newCollapse = { Field = field; CollapsePosition = nextCollapsePosition; Attempts = [] }
+                        newCollapses.Push(newCollapse)
+                    | None ->
+                        // TODO: early return here
+                        let newCollapse = { Field = field; CollapsePosition = Vector2.Zero; Attempts = [] }
+                        newCollapses.Push(newCollapse)
                 | None -> ()
         | None -> ()
 
