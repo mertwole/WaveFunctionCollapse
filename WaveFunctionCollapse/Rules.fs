@@ -8,24 +8,19 @@ type Rule = {
     Adjacency: Direction
 }
 
-type TileWithWeight = {
-    Tile: char
-    Weight: float
-}
-
 type RuleSet = {
     Rules: Rule list
-    Weights: TileWithWeight list
+    Weights: Map<char, float>
 }
 
 let parseRulesFromSample(sample: char[,]): RuleSet =
     let weights = 
         seq { 0 .. sample.GetLength(0) - 1 }
         |> Seq.allPairs (seq { 0 .. sample.GetLength(1) - 1 })
-        |> Seq.map (fun (x, y) -> sample.[x, y])
+        |> Seq.map (fun (x, y) -> sample.[y, x])
         |> Seq.countBy (fun x -> x)
-        |> Seq.map (fun (tile, count) -> { Tile = tile; Weight = float count })
-        |> Seq.toList
+        |> Seq.map (fun (tile, weight) -> (tile, float weight))
+        |> Map.ofSeq
 
     let rules = 
         seq { 0 .. sample.GetLength(0) - 1 }
