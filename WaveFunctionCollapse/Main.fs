@@ -120,14 +120,49 @@ let determineMinimalEntropyCell(field: Field): Vector2 option =
                 |> Seq.minBy (fun position -> field.GetCell(position).Variants.Length)
         )
 
+let rec weightedSelectInner(
+    accumulator: float, 
+    random: float, 
+    weightedVariants: (char * float) list
+): char =
+    let (_, weight) = List.head weightedVariants
+    if accumulator + weight >= random || weightedVariants.Length = 1 then
+        let (tile, _) = weightedVariants.Head
+        tile
+    else
+        weightedSelectInner(accumulator + weight, random, weightedVariants.Tail)
+
+let weightedSelect(rules: RuleSet, variants: char list): char = 
+    let weightedVariants = 
+        variants
+        |> Seq.choose (fun variant -> 
+            rules.Weights.TryFind variant
+            |> Option.map (fun weight -> (variant, weight))
+        )
+        |> Seq.toList
+
+    let weightSum = 
+        weightedVariants
+        |> Seq.sumBy (fun (_, weight) -> weight)
+
+    let rand = System.Random().NextDouble() * weightSum
+
+    weightedSelectInner(0, rand, weightedVariants)
+
 let processCollapse(collapse: CollapsedField, rules: RuleSet): Stack<CollapsedField> =
     let collapsedCell = collapse.Field.GetCell(collapse.CollapsePosition)
 
-    // TODO: Make decision based on tile probabilities derived from input sample.
-    let nextAttempt = 
+    let validValues = 
         collapsedCell.Variants 
-        |> Seq.tryFind (fun v -> (not (List.contains v collapse.Attempts)))
-
+        |> Seq.filter (fun v -> (not (collapse.Attempts |> List.contains v)))
+        |> Seq.toList
+    
+    let nextAttempt = 
+        match validValues with 
+        | [] -> None
+        | [single] -> Some single
+        | multiple -> Some (weightedSelect(rules, multiple))
+    
     let newCollapses = Stack()
 
     match nextAttempt with
@@ -173,18 +208,20 @@ let tryCollapse(initialField: Field, rules: RuleSet) : Field option =
         | _ -> Some (collapses.Pop().Field)
 
 let sample = array2D([
-    ['┌'; '─'; '─'; '┐'; '┌'; '┐']
-    ['│'; '┌'; '┐'; '└'; '┘'; '│']
-    ['│'; '└'; '┘'; '┌'; '┐'; '│']
-    ['└'; '─'; '─'; '┘'; '└'; '┘']
+    [' '; ' '; ' '; ' '; ' '; ' '; ' '; ' ']
+    [' '; '┌'; '─'; '─'; '┐'; '┌'; '┐'; ' ']
+    [' '; '│'; '┌'; '┐'; '└'; '┘'; '│'; ' ']
+    [' '; '│'; '└'; '┘'; '┌'; '┐'; '│'; ' ']
+    [' '; '└'; '─'; '─'; '┘'; '└'; '┘'; ' ']
+    [' '; ' '; ' '; ' '; ' '; ' '; ' '; ' ']
 ])
 
 let rules = parseRulesFromSample(sample)
 
-let initialSuperposition = Superposition(['─'; '│'; '┌'; '┐'; '└'; '┘'])
-let initialField = Field({ X = 8; Y = 4 }, initialSuperposition)
+let initialSuperposition = Superposition(['─'; '│'; '┌'; '┐'; '└'; '┘'; ' '])
+let initialField = Field({ X = 40; Y = 20 }, initialSuperposition)
 
-initialField.SetCell({ X = 0; Y = 0 }, Superposition(['└']))
+initialField.SetCell({ X = 0; Y = 0 }, Superposition(['┌']))
 
 let field = tryCollapse(initialField, rules)
 
